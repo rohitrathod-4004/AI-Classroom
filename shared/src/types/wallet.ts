@@ -19,7 +19,7 @@ export interface CreditTransactionDto {
   source: TransactionSource;
   description: string;
   referenceId?: string; // e.g. lectureId, inviteId, stripeInvoiceId
-  createdAt: string;
+  createdAt: string; 
 }
 
 export interface CreditUsageDto {

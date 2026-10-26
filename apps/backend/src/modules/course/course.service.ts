@@ -54,10 +54,10 @@ export class CourseService {
     );
 
     if (!course) throw new AppError('Course not found or unauthorized', 404, ErrorCodes.NOT_FOUND);
-    
+
     // Remove from all users' enrolled courses
     await User.updateMany({ enrolledCourses: courseId }, { $pull: { enrolledCourses: courseId } });
-    
+
     return { success: true };
   }
 
@@ -79,7 +79,7 @@ export class CourseService {
 
   static async listCourses(userId: string, role: string) {
     let query: any = { deletedAt: null };
-    
+
     if (role === 'teacher') {
       query.teacherId = userId;
     } else {
@@ -104,3 +104,11 @@ export class CourseService {
     return this.toDto(course as any);
   }
 }
+
+
+//The Service contains pure business logic.
+//Notice there is no req or res here!
+//Why is this amazing?
+//Imagine you want to fetch a course in a background BullMQ job (which has no HTTP request).
+//You can just call CourseService.getCourse(id, userId, role) directly.
+//In traditional MVC, that logic would be trapped inside the Controller.

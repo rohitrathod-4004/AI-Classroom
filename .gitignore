@@ -363,3 +363,13 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Uploads & Audio recording chunks
+uploads/
+**/uploads/
+apps/backend/uploads/
+*.wav
+*.webm
+Recording.wav
+Recording.webm
+test_audio.wav

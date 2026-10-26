@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useCourseStore } from '../../infrastructure/stores/courseStore';
 import { useAuthStore } from '../../infrastructure/stores/authStore';
 import { Loader2, ArrowLeft, Settings, Users, Trash2, Video, Clock, CheckCircle2, Play, CircleDot } from 'lucide-react';
@@ -15,6 +15,7 @@ export function CourseDetails() {
   const [liveStatus, setLiveStatus] = useState<any>(null);
   const [lectures, setLectures] = useState<any[]>([]);
   const [isLoadingLectures, setIsLoadingLectures] = useState(true);
+  const [isEnding, setIsEnding] = useState(false);
 
   useEffect(() => {
     if (courseId) {
@@ -29,7 +30,7 @@ export function CourseDetails() {
   // Poll for live status
   useEffect(() => {
     if (!courseId) return;
-    let timeoutId: NodeJS.Timeout;
+    let timeoutId: ReturnType<typeof setTimeout>;
     
     const pollLiveStatus = async () => {
       if (document.visibilityState === 'hidden') {
@@ -82,7 +83,25 @@ export function CourseDetails() {
     );
   }
 
-  const isTeacher = user?.id === activeCourse.teacherId;
+  const isTeacher = user?.id === activeCourse.teacherId || user?.role === 'teacher';
+
+  const handleEndLiveSession = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!liveStatus) return;
+    if (!window.confirm("Are you sure you want to end this live session and process AI study materials?")) return;
+    try {
+      setIsEnding(true);
+      await api.post(`/api/lectures/${liveStatus._id}/end`);
+      setLiveStatus(null);
+      const { data } = await api.get(`/api/courses/${courseId}/lectures`);
+      setLectures(data.data);
+    } catch (err: any) {
+      console.error("Failed to end live session", err);
+      alert(err.response?.data?.message || "Failed to end live session");
+    } finally {
+      setIsEnding(false);
+    }
+  };
 
   const handleDelete = async () => {
     if (!window.confirm("Are you sure you want to delete this course? This action cannot be undone.")) return;
@@ -116,12 +135,23 @@ export function CourseDetails() {
               <span className="text-sm text-foreground font-medium">{liveStatus.title}</span>
             </div>
           </div>
-          <button 
-            onClick={() => navigate(`/courses/${courseId}/live`)}
-            className="px-4 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-md transition-colors shadow-sm"
-          >
-            Join Live Class
-          </button>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => navigate(`/courses/${courseId}/live`)}
+              className="px-4 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-md transition-colors shadow-sm"
+            >
+              Join Live Class
+            </button>
+            {isTeacher && (
+              <button 
+                onClick={handleEndLiveSession}
+                disabled={isEnding}
+                className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/30 text-sm font-medium rounded-md transition-colors"
+              >
+                {isEnding ? 'Ending...' : 'End Live Session'}
+              </button>
+            )}
+          </div>
         </div>
       )}
 

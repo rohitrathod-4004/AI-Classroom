@@ -1,15 +1,18 @@
 import { Request, Response } from 'express';
 import { lectureAIService } from './lecture.ai.service';
+import { LectureService } from './lecture.service';
 import { asyncHandler } from '../../utils/asyncHandler';
 
 export const getLectureSummary = asyncHandler(async (req: Request, res: Response) => {
   const { lectureId } = req.params;
+  await LectureService.validateAccessByLectureId(lectureId, req.user!.id, req.user!.role);
   const result = await lectureAIService.getSummary(lectureId);
   res.json({ success: true, data: result });
 });
 
 export const getLectureTopics = asyncHandler(async (req: Request, res: Response) => {
   const { lectureId } = req.params;
+  await LectureService.validateAccessByLectureId(lectureId, req.user!.id, req.user!.role);
   const result = await lectureAIService.getTopics(lectureId);
   res.json({ success: true, data: result });
 });
@@ -17,6 +20,7 @@ export const getLectureTopics = asyncHandler(async (req: Request, res: Response)
 export const askLectureAI = asyncHandler(async (req: Request, res: Response) => {
   const { lectureId } = req.params;
   const { question } = req.body;
+  await LectureService.validateAccessByLectureId(lectureId, req.user!.id, req.user!.role);
   
   if (!question) {
     return res.status(400).json({ success: false, error: "Question is required" });

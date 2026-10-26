@@ -32,7 +32,7 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(data.password, 12);
-    
+
     const user = await User.create({
       name: data.name,
       email: data.email,
@@ -79,7 +79,7 @@ export class AuthService {
 
   static async refresh(oldRefreshToken: string, ipAddress?: string, deviceInfo?: string) {
     const tokenHash = crypto.createHash('sha256').update(oldRefreshToken).digest('hex');
-    
+
     const session = await RefreshSession.findOne({ tokenHash }).populate<{ userId: IUserDocument }>('userId');
     if (!session) {
       throw new AppError('Invalid refresh token', 401, ErrorCodes.INVALID_TOKEN);
@@ -97,7 +97,7 @@ export class AuthService {
     }
 
     const user = session.userId;
-    
+
     // Rotate token
     session.isRevoked = true; // Mark old token as used
     await session.save();

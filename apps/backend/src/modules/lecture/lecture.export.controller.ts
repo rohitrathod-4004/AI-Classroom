@@ -8,17 +8,14 @@ import { User } from '../../models/User';
 import { LectureQuiz } from '../../models/LectureQuiz';
 import { LectureFlashcard } from '../../models/LectureFlashcard';
 import { PdfService } from '../../services/pdf/pdf.service';
+import { LectureService } from './lecture.service';
+import { asyncHandler } from '../../utils/asyncHandler';
 
-export const exportLectureData = async (req: Request, res: Response) => {
+export const exportLectureData = asyncHandler(async (req: Request, res: Response) => {
   const { lectureId } = req.params;
-  const userId = req.user?.id;
+  const userId = req.user!.id;
+  const { lecture } = await LectureService.validateAccessByLectureId(lectureId, userId, req.user!.role);
   const format = req.query.format as string || 'markdown'; // default markdown
-
-  try {
-    const lecture = await Lecture.findById(lectureId);
-    if (!lecture) {
-      return res.status(404).json({ success: false, error: 'Lecture not found' });
-    }
 
     const chunks = await TranscriptChunk.find({ lectureId }).sort({ chunk_index: 1 });
     const notes = await LectureNote.find({ lectureId, userId }).sort({ timestamp: 1 });
@@ -63,27 +60,19 @@ export const exportLectureData = async (req: Request, res: Response) => {
     res.setHeader('Content-Type', 'text/markdown');
     res.setHeader('Content-Disposition', `attachment; filename="${lecture.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_export.md"`);
     res.send(md);
-  } catch (error) {
-    console.error('Export error:', error);
-    res.status(500).json({ success: false, error: 'Failed to export lecture' });
-  }
-};
+});
 
-export const exportStudyPackPdf = async (req: Request, res: Response) => {
+export const exportStudyPackPdf = asyncHandler(async (req: Request, res: Response) => {
   const { lectureId } = req.params;
+  const { lecture } = await LectureService.validateAccessByLectureId(lectureId, req.user!.id, req.user!.role);
 
-  try {
-    // Parallel fetching for performance
-    const [lecture, chunks, quiz, flashcards] = await Promise.all([
-      Lecture.findById(lectureId).lean(),
+    const [chunks, quiz, flashcards] = await Promise.all([
       TranscriptChunk.find({ lectureId }).sort({ chunk_index: 1 }).lean(),
       LectureQuiz.findOne({ lectureId }).lean(),
       LectureFlashcard.findOne({ lectureId }).lean()
     ]);
 
-    if (!lecture) {
-      return res.status(404).json({ success: false, error: 'Lecture not found' });
-    }
+
 
     const course = await Course.findById(lecture.courseId).lean();
     const teacher = await User.findById(lecture.teacherId).lean();
@@ -103,9 +92,4 @@ export const exportStudyPackPdf = async (req: Request, res: Response) => {
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Length', pdfBuffer.length);
     res.send(pdfBuffer);
-    
-  } catch (error) {
-    console.error('PDF Export error:', error);
-    res.status(500).json({ success: false, error: 'Failed to generate Study Pack PDF' });
-  }
-};
+});

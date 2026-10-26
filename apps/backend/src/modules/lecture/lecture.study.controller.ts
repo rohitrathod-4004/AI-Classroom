@@ -1,31 +1,25 @@
 import { Request, Response } from 'express';
 import { LectureQuiz } from '../../models/LectureQuiz';
 import { LectureFlashcard } from '../../models/LectureFlashcard';
+import { LectureService } from './lecture.service';
+import { asyncHandler } from '../../utils/asyncHandler';
 
-export const getLectureQuiz = async (req: Request, res: Response) => {
-  try {
-    const { lectureId } = req.params;
-    const quiz = await LectureQuiz.findOne({ lectureId });
+export const getLectureQuiz = asyncHandler(async (req: Request, res: Response) => {
+  const { lectureId } = req.params;
+  await LectureService.validateAccessByLectureId(lectureId, req.user!.id, req.user!.role);
+  const quiz = await LectureQuiz.findOne({ lectureId });
     if (!quiz) {
       return res.status(404).json({ success: false, error: 'Quiz not found' });
     }
-    res.json({ success: true, data: quiz });
-  } catch (error) {
-    console.error('Failed to fetch quiz:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch quiz' });
-  }
-};
+  res.json({ success: true, data: quiz });
+});
 
-export const getLectureFlashcards = async (req: Request, res: Response) => {
-  try {
-    const { lectureId } = req.params;
-    const flashcards = await LectureFlashcard.findOne({ lectureId });
+export const getLectureFlashcards = asyncHandler(async (req: Request, res: Response) => {
+  const { lectureId } = req.params;
+  await LectureService.validateAccessByLectureId(lectureId, req.user!.id, req.user!.role);
+  const flashcards = await LectureFlashcard.findOne({ lectureId });
     if (!flashcards) {
       return res.status(404).json({ success: false, error: 'Flashcards not found' });
     }
-    res.json({ success: true, data: flashcards });
-  } catch (error) {
-    console.error('Failed to fetch flashcards:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch flashcards' });
-  }
-};
+  res.json({ success: true, data: flashcards });
+});

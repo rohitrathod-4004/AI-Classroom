@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
-import path from "path";
+import path from "path";  
 import fs from "fs";
 import { connectDB } from "./db/connection";
 import { env } from "./config/env";
@@ -12,12 +12,10 @@ import { getRedisClient } from "./infrastructure/redis/redisClient";
 import { apiRateLimiter } from "./middleware/rateLimit.middleware";
 
 import uploadRouter from "./routes/upload";
-import transcriptRouter from "./routes/transcript";
 import authRouter from "./modules/auth/auth.routes";
 
 import lectureRouter from "./modules/lecture/lecture.routes";
 import courseRouter from "./modules/course/course.routes";
-import dashboardRouter from "./modules/dashboard/dashboard.routes";
 import searchRouter from "./modules/search/search.routes";
 import adminRouter from "./modules/admin/admin.routes";
 import organizationRouter from "./modules/organization/organization.routes";
@@ -93,7 +91,6 @@ app.get('/api/audio/:lectureId', (req, res) => {
 app.use("/api/auth", authRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/courses", courseRouter);
-app.use("/api/dashboard", dashboardRouter);
 app.use("/api/search", searchRouter);
 app.use("/api/organizations", organizationRouter);
 app.use("/api/billing", billingRouter);
@@ -102,7 +99,6 @@ app.use("/api", lectureRouter);
 
 // Legacy/Existing Routes (Preserved for backwards compatibility)
 app.use("/", uploadRouter);
-app.use("/", transcriptRouter);
 
 // Global Error Handler
 app.use(globalErrorHandler);

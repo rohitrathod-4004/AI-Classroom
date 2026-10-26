@@ -101,6 +101,22 @@ router.post("/upload-chunk", authenticate, upload.single("file"), async (req: Re
 
     convertedPath = await convertToWav(originalPath);
 
+    // 2.5 Persist the WAV chunk for later concatenation into full lecture audio (MUST happen before Whisper in case Whisper fails)
+    if (lectureId) {
+      try {
+        const chunkDir = path.join(LECTURES_DIR, lectureId, 'chunks');
+        if (!fs.existsSync(chunkDir)) fs.mkdirSync(chunkDir, { recursive: true });
+        const destPath = path.join(chunkDir, `chunk_${String(chunk_index).padStart(5, '0')}.wav`);
+        fs.copyFileSync(convertedPath!, destPath);
+        console.log(`[upload] [${requestId}] Audio chunk saved: ${path.basename(destPath)}`);
+      } catch (saveErr: any) {
+        console.warn(`[upload] [${requestId}] Could not save audio chunk (non-fatal): ${saveErr.message}`);
+      }
+      
+      // Record Metrics immediately so chunk count is accurate even if live transcription fails
+      await LectureService.recordChunkMetrics(lectureId);
+    }
+
     // 3. Send to Python Whisper core
     const startTime = Date.now();
     const result = await transcribeAudio(convertedPath, language);
@@ -131,21 +147,6 @@ router.post("/upload-chunk", authenticate, upload.single("file"), async (req: Re
       processingProvider: 'faster-whisper'
     });
     
-    // 6. Record Metrics
-    if (lectureId) {
-      await LectureService.recordChunkMetrics(lectureId, latencyMs);
-
-      // 7. Persist the WAV chunk for later concatenation into full lecture audio
-      try {
-        const chunkDir = path.join(LECTURES_DIR, lectureId, 'chunks');
-        if (!fs.existsSync(chunkDir)) fs.mkdirSync(chunkDir, { recursive: true });
-        const destPath = path.join(chunkDir, `chunk_${String(chunk_index).padStart(5, '0')}.wav`);
-        fs.copyFileSync(convertedPath!, destPath);
-        console.log(`[upload] [${requestId}] Audio chunk saved: ${path.basename(destPath)}`);
-      } catch (saveErr: any) {
-        console.warn(`[upload] [${requestId}] Could not save audio chunk (non-fatal): ${saveErr.message}`);
-      }
-    }
 
     // Trigger optimization sequence (Legacy)
     refineSessionChunks(session_id, chunk_index);

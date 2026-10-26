@@ -1,27 +1,30 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useCourseStore } from '../../infrastructure/stores/courseStore';
 import { useTimelineStore } from '../../infrastructure/stores/timelineStore';
+import { useAuthStore } from '../../infrastructure/stores/authStore';
 import { SmartTimeline } from './components/timeline/SmartTimeline';
 import { useLiveTranscriptPolling } from './hooks/useLiveTranscriptPolling';
 import { api } from '../../infrastructure/api';
-import { ArrowLeft, Radio, Clock, AlertCircle, Loader2 } from 'lucide-react';
+import { ArrowLeft, Radio, Clock, AlertCircle, Loader2, Square } from 'lucide-react';
 import type { VirtuosoHandle } from 'react-virtuoso';
 
 export function LiveLectureViewer() {
   const { courseId } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuthStore();
   const { activeCourse, fetchCourseById, courses } = useCourseStore();
   const { setNodes, appendNodes, nodes } = useTimelineStore();
   
   const [liveLectureId, setLiveLectureId] = useState<string | null>(null);
   const [isLive, setIsLive] = useState<boolean>(false);
   const [lectureEnded, setLectureEnded] = useState<boolean>(false);
+  const [isEnding, setIsEnding] = useState<boolean>(false);
   const [lectureTitle, setLectureTitle] = useState<string>('Live Session');
   const [startTime, setStartTime] = useState<Date | null>(null);
   const [duration, setDuration] = useState<number>(0);
   const [initialLoading, setInitialLoading] = useState<boolean>(true);
-  const pollingRetryRef = useRef<NodeJS.Timeout | null>(null);
+  const pollingRetryRef = useRef<ReturnType<typeof setInterval> | null>(null);
   
   const virtuosoRef = useRef<VirtuosoHandle>(null);
 
@@ -103,6 +106,24 @@ export function LiveLectureViewer() {
     setIsLive(false);
     setLectureEnded(true);
   }, []);
+
+  const isTeacher = user?.role === 'teacher' || user?.id === activeCourse?.teacherId;
+
+  const handleEndLecture = async () => {
+    if (!liveLectureId) return;
+    if (!window.confirm("Are you sure you want to end this live session and process AI materials?")) return;
+    try {
+      setIsEnding(true);
+      await api.post(`/api/lectures/${liveLectureId}/end`);
+      setIsLive(false);
+      setLectureEnded(true);
+    } catch (err: any) {
+      console.error('Failed to end lecture', err);
+      alert(err.response?.data?.message || 'Failed to end live lecture');
+    } finally {
+      setIsEnding(false);
+    }
+  };
 
   const { error: pollingError } = useLiveTranscriptPolling({
     courseId: courseId!,
@@ -218,16 +239,28 @@ export function LiveLectureViewer() {
           </div>
         </div>
         
-        <div className="flex flex-col items-end gap-1">
-          <div className="flex items-center gap-2 px-3 py-1 bg-surface border border-border/40 rounded-full text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-            {pollingError ? (
-              <><AlertCircle className="w-3 h-3 text-amber-500" /> {pollingError}</>
-            ) : (
-              <><Radio className="w-3 h-3 text-emerald-500" /> Connected</>
-            )}
-          </div>
-          <div className="text-[10px] text-muted-foreground">
-            {nodes.length} chunks received
+        <div className="flex items-center gap-4">
+          {isTeacher && (
+            <button
+              onClick={handleEndLecture}
+              disabled={isEnding}
+              className="px-3.5 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/30 font-medium text-xs rounded-lg transition-colors shadow-sm flex items-center gap-1.5 cursor-pointer"
+            >
+              <Square className="w-3.5 h-3.5 fill-current" />
+              {isEnding ? 'Ending...' : 'End Live Session'}
+            </button>
+          )}
+          <div className="flex flex-col items-end gap-1">
+            <div className="flex items-center gap-2 px-3 py-1 bg-surface border border-border/40 rounded-full text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+              {pollingError ? (
+                <><AlertCircle className="w-3 h-3 text-amber-500" /> {pollingError}</>
+              ) : (
+                <><Radio className="w-3 h-3 text-emerald-500" /> Connected</>
+              )}
+            </div>
+            <div className="text-[10px] text-muted-foreground">
+              {nodes.length} chunks received
+            </div>
           </div>
         </div>
       </header>

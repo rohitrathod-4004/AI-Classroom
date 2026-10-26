@@ -106,18 +106,32 @@ export class LectureService {
     }
 
     const now = new Date();
-    const durationSeconds = Math.max(0, Math.floor((now.getTime() - lecture.startedAt.getTime()) / 1000));
+    let durationSeconds = Math.max(0, Math.floor((now.getTime() - lecture.startedAt.getTime()) / 1000));
+    
+    // Safety guard for abandoned/forgotten live sessions:
+    // If lecture was left open for hours without streaming, calculate from latest chunk or cap to realistic duration
+    if (durationSeconds > 4 * 3600 || (lecture.latestChunkReceivedAt && (now.getTime() - lecture.latestChunkReceivedAt.getTime() > 15 * 60 * 1000))) {
+      if (lecture.latestChunkReceivedAt && lecture.latestChunkReceivedAt > lecture.startedAt) {
+        durationSeconds = Math.max(60, Math.floor((lecture.latestChunkReceivedAt.getTime() - lecture.startedAt.getTime()) / 1000));
+      } else {
+        durationSeconds = Math.max(60, (lecture.chunkCount || 1) * 5);
+      }
+    }
     
     // Deduct Credits: 1 credit per minute (minimum 1 credit)
     const creditsToDeduct = Math.max(1, Math.ceil(durationSeconds / 60));
-    await WalletService.deductLectureCredits(
-      teacher.walletId.toString(),
-      creditsToDeduct,
-      durationSeconds,
-      lecture._id.toString(),
-      teacherId,
-      teacher.organizationId?.toString()
-    );
+    try {
+      await WalletService.deductLectureCredits(
+        teacher.walletId.toString(),
+        creditsToDeduct,
+        durationSeconds,
+        lecture._id.toString(),
+        teacherId,
+        teacher.organizationId?.toString()
+      );
+    } catch (err: any) {
+      console.warn('[LectureService] Credit deduction failed during endLecture:', err.message);
+    }
 
     lecture.status = 'ai_processing';
     lecture.endedAt = now;
@@ -179,6 +193,17 @@ export class LectureService {
     if (!lecture) throw new AppError('Lecture not found', 404, ErrorCodes.NOT_FOUND);
 
     return { course, lecture };
+  }
+
+  /**
+   * Helper method to validate access to a lecture when only lectureId is available (e.g. from /api/lectures/:lectureId endpoints)
+   */
+  static async validateAccessByLectureId(lectureId: string, userId: string, role: string) {
+    const lecture = await Lecture.findOne({ _id: lectureId, deletedAt: null }).lean();
+    if (!lecture) throw new AppError('Lecture not found', 404, ErrorCodes.NOT_FOUND);
+
+    // Re-use the existing core validation logic with the discovered courseId
+    return await this.validateLectureAccess(lecture.courseId.toString(), lectureId, userId, role);
   }
 
   /**

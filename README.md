@@ -1,121 +1,220 @@
 # AI Classroom Platform
 
-A real-time, offline-first web application designed to transform lecture recordings into interactive, AI-powered study materials. This platform utilizes the Google Gemini Flash model to automatically structure long-form video/audio into semantic chapters, quizzes, 3D flashcards, and comprehensive study notes.
+A real-time, offline-resilient, transcript-driven educational platform that transforms live spoken lectures into an interactive, AI-powered study workspace. 
 
-## 🌟 Features
-- **Offline-First Recording:** Transcribe audio in the browser via Web Worker (Whisper) without waiting for server uploads.
-- **Smart Virtuoso Timeline:** 60fps virtualization for thousands of transcript chunks, auto-syncing with media playback.
-- **Semantic Chapters:** AI automatically chunks the lecture into distinct timeline topics.
-- **Study Workspace:**
-  - Auto-generated Multiple Choice Quizzes.
-  - Interactive 3D Flashcards with keyboard navigation.
-  - Summaries and Topic highlights.
-- **Teacher Analytics:** View student engagement and AI processing throughput directly from the dashboard.
+Powered by **OpenAI Whisper**, **Google Gemini 1.5 Flash**, **BullMQ + Redis**, and **Razorpay**, the platform captures the instructor's microphone audio, streams live captions to students in real time, and automatically generates structured notes, 3D flashcards, quizzes, and a cited AI Q&A tutor the moment class ends.
 
-## 📸 Screenshots
+---
 
-| Dashboard | Lecture Viewer & Smart Timeline |
-|-----------|--------------------------------|
-| ![Dashboard Placeholder](docs/screenshots/dashboard.png) | ![Lecture Viewer Placeholder](docs/screenshots/lecture_viewer.png) |
+## 🌟 Key Features
 
-| AI Study Workspace | Generated Quiz |
-|--------------------|----------------|
-| ![Study Mode Placeholder](docs/screenshots/study_mode.png) | ![Quiz Placeholder](docs/screenshots/quiz.png) |
+### 🎙️ 1. Live & Offline-First Audio Streaming
+- **Microphone-Only Capture:** No heavy video streams required. Instructors stream audio chunks directly from their browser microphone.
+- **IndexedDB Offline Buffer:** Voice chunks are cached in the browser's local database before uploading. If campus Wi-Fi drops mid-lecture, recording continues uninterrupted and auto-syncs when reconnected — **zero data loss**.
+- **Real-Time Student Captions:** Students join live classes (`/courses/:courseId/live`) and watch the instructor's speech transcribe into text on their screen within 3 seconds.
 
-## 🏗 Architecture & Tech Stack
+### ⏱️ 2. Smart Virtuoso Transcript Timeline
+- **60 FPS DOM Virtualization:** Built with **React Virtuoso** to smoothly render thousands of transcript chunks for 2+ hour lectures without browser lag or memory bloat.
+- **Bi-directional Media/Time Sync:** Click any sentence in the transcript to jump directly to that exact second.
 
-### Tech Stack
-- **Frontend:** React, Vite, Zustand, Tailwind CSS, React Virtuoso
-- **Backend:** Node.js, Express, MongoDB (Mongoose), BullMQ
-- **AI/ML:** Google Gemini 1.5 Flash, Transformers.js (Local Whisper)
-- **Queue/Cache:** Redis
+### 🧠 3. Post-Lecture AI Study Workspace
+Once the instructor ends the lecture, an async background pipeline generates:
+- **Executive Summaries & Chapters:** High-level takeaways, key bullet points, and semantic timeline topics.
+- **Interactive 3D Flashcards:** Flippable flashcards with keyboard navigation (`Space` / `Arrow keys`) for active recall studying.
+- **Auto-Generated Quizzes (MCQs):** Multiple-choice questions with instant evaluation, scoring, and AI explanations.
 
-### Why This Architecture?
-The platform follows an **Async AI worker pattern**. By offloading all expensive LLM operations (Embeddings, Summaries, Quizzes) to a BullMQ worker via Redis, the primary Node.js thread remains unblocked, ensuring zero dropped frames when teachers upload chunked audio. 
-Virtuoso was selected on the frontend to prevent DOM bloat; rendering thousands of transcript nodes would otherwise crush browser memory. Zustand strictly manages the state locally without cascading Context updates.
+### 🔍 4. In-Lecture AI Tutor (Grounded RAG)
+- **Local Vector Search:** Generates mathematical vector embeddings for every lecture segment and performs cosine similarity search.
+- **Anti-Hallucination Citations:** Answers student questions with **clickable timestamp citations (e.g., `Jump to [14:22]`)**, referencing the exact sentence in the lecture transcript.
 
-## 📸 System Diagrams
+### 💳 5. AI Credit Wallet & Razorpay Billing
+- **Usage Metering:** AI operations are metered against a digital credit wallet (e.g., 1 credit per minute of lecture processed).
+- **Razorpay Checkout:** Instructors and institutions can top up credits via secure Razorpay checkout (INR).
+- **Cryptographic Security:** Backend verifies `razorpay_signature` using **HMAC SHA-256** with audit logs (`CreditTransaction`) to prevent spoofing and double-spending.
 
-### Recording & Processing Lifecycle
+### 👥 6. Course & Organization Management
+- **Role-Based Access Control (RBAC):** Distinct workflows for Teachers (recording studio, live session management, course creation) and Students (live caption viewer, study workspace).
+- **Session Recovery:** Teachers can safely end orphaned or active live sessions directly from the course dashboard or live viewer with automatic duration safety caps.
+
+---
+
+## 🏗 System Architecture & Tech Stack
+
+```
+[Teacher Microphone] ──► [IndexedDB Buffer] ──► [Express Backend API]
+                                                      │
+                       ┌──────────────────────────────┴──────────────────────────────┐
+                       ▼                                                             ▼
+           [Python Whisper Service]                                       [BullMQ + Redis Worker]
+            (FastAPI Audio -> Text)                                                  │
+                       │                                                             ▼
+                       ▼                                                 [Google Gemini 1.5 Flash]
+              [MongoDB Database] ◄───────────────────────────────────── (Summaries, Quizzes, Flashcards,
+         (Chunks, Lectures, Wallets)                                        Vector Cosine Embeddings)
+                       │
+                       ▼
+         [Frontend: React Virtuoso] ──► [Live Captions / AI Study Workspace]
+```
+
+### Tech Stack Details
+- **Frontend:** React 18, TypeScript, Vite, Zustand, Tailwind CSS, React Virtuoso, Lucide Icons
+- **Backend:** Node.js, Express, TypeScript, MongoDB (Mongoose), BullMQ, Zod
+- **Queue & Cache:** Redis
+- **Speech-to-Text:** Python, FastAPI, OpenAI Whisper, Uvicorn
+- **AI / LLM:** Google Gemini 1.5 Flash, Local Vector Cosine Similarity Search
+- **Payments:** Razorpay SDK (Orders API + HMAC SHA-256 Signature Verification)
+
+---
+
+## 📸 Core Workflow Diagrams
+
+### 1. Recording & Live Student Streaming
+```mermaid
+sequenceDiagram
+    participant Teacher as Teacher (Browser)
+    participant Student as Student (Browser)
+    participant Backend as Node.js API
+    participant Whisper as Python Whisper Service
+    participant DB as MongoDB
+
+    Teacher->>Teacher: Capture Mic Chunks (IndexedDB Buffer)
+    Teacher->>Backend: POST /api/courses/:id/lectures/:id/chunks
+    Backend->>Whisper: Forward chunk audio (.wav)
+    Whisper-->>Backend: Return transcribed text + timestamps
+    Backend->>DB: Save TranscriptChunk
+    Student->>Backend: GET /live-chunks (Polling every 3s)
+    Backend-->>Student: Return incremental transcript nodes
+    Student->>Student: Append to SmartTimeline (Live Captions)
+```
+
+### 2. Async AI Finalization Pipeline
 ```mermaid
 sequenceDiagram
     participant Teacher
-    participant Frontend
     participant Backend
-    participant Worker (BullMQ)
-    participant Gemini
+    participant Redis as Redis / BullMQ
+    participant Worker as AI Worker
+    participant Gemini as Google Gemini
+    participant DB as MongoDB
 
-    Teacher->>Frontend: Start Recording
-    Frontend->>Frontend: Whisper WebWorker (Local Transcript)
-    Frontend->>Backend: Sync Chunks (IndexedDB queue)
-    Backend->>MongoDB: Save TranscriptChunk
-    Teacher->>Frontend: Stop Recording
-    Frontend->>Backend: Finalize Lecture
-    Backend->>Redis: Enqueue AI Job
-    Worker->>Redis: Consume AI Job
-    Worker->>Gemini: Request Summary & Topics
-    Gemini-->>Worker: JSON Response
-    Worker->>Gemini: Request Quiz & Flashcards
-    Gemini-->>Worker: JSON Response
-    Worker->>MongoDB: Save generated study materials
+    Teacher->>Backend: POST /api/lectures/:id/end
+    Backend->>DB: Set status = 'ai_processing' & deduct wallet credits
+    Backend->>Redis: Enqueue Lecture Finalize Job
+    Worker->>Redis: Pick up Job
+    Worker->>Gemini: Generate Summary & Topics (JSON schema)
+    Worker->>Gemini: Generate Quizzes & 3D Flashcards (JSON schema)
+    Worker->>Worker: Generate Embeddings & Index Chunks
+    Worker->>DB: Save study materials & set status = 'ready'
 ```
 
-## 🚀 Setup & Localhost Development
+---
+
+## 🚀 Getting Started
 
 ### Prerequisites
-- Node.js (v18+)
-- MongoDB running locally (default: `mongodb://localhost:27017/ai_classroom`)
-- Redis running locally (default: `127.0.0.1:6379`)
-- Google Gemini API Key
+- **Node.js:** v18+
+- **MongoDB:** Running locally (`mongodb://localhost:27017`)
+- **Redis:** Running locally (`127.0.0.1:6379`)
+- **Python:** 3.10+ (for Whisper service)
+- **Google Gemini API Key**
+- **Razorpay Key & Secret** (Test mode keys for billing)
+
+---
 
 ### Installation
 
-1. **Install Dependencies**
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/rohitrathod-4004/AI-Classroom.git
+   cd AI-Classroom
+   ```
+
+2. **Install root & workspace dependencies:**
    ```bash
    npm install
    ```
 
-2. **Environment Configuration**
-   Copy `.env.example` to `apps/backend/.env`:
-   ```bash
+3. **Configure Environment Variables:**
+   Create `.env` inside `apps/backend/.env`:
+   ```env
    PORT=4000
    NODE_ENV=development
-   MONGODB_URI=mongodb://localhost:27017/ai_classroom
+   MONGO_URI=mongodb://localhost:27017/lecture-transcription
    REDIS_HOST=127.0.0.1
    REDIS_PORT=6379
-   JWT_SECRET=local_development_secret_key
-   GEMINI_API_KEY=your_key_here
+   JWT_SECRET=your_jwt_secret_key_here
+   GEMINI_API_KEY=your_gemini_api_key_here
+   WHISPER_SERVICE_URL=http://localhost:8000
+   RAZORPAY_KEY_ID=your_razorpay_key_id
+   RAZORPAY_KEY_SECRET=your_razorpay_key_secret
    ```
 
-3. **Seed Database (Demo Mode)**
-   This will instantly generate a highly realistic "Consensus Algorithms" lecture containing AI summaries and quizzes without consuming your Gemini quotas.
+4. **Set Up Python Whisper Service:**
    ```bash
-   npm run seed
-   # For a clean slate: npm run seed:reset
+   cd python-services/whisper-service
+   python -m venv venv
+   # Windows:
+   .\venv\Scripts\activate
+   # Linux/macOS:
+   source venv/bin/activate
+
+   pip install -r requirements.txt
    ```
 
-4. **Run Platform**
-   Using `concurrently`, spin up the frontend and backend simultaneously:
-   ```bash
-   npm run dev
-   ```
+---
 
-## 🎓 Demo Flow
+### Running Locally
 
-1. Go to `http://localhost:5173`
-2. **Log in** as `student@demo.com` (password: `password123`)
-3. **Open** "Introduction to Distributed Systems"
-4. **Click** the "Understanding Consensus: Paxos and Raft" lecture.
-5. **Explore** the Smart Timeline on the left. Click transcript chunks to "seek" the media.
-6. **Toggle** "Study Mode" in the top right to collapse the timeline.
-7. **Interact** with the generated 3D Flashcards and Quiz on the right-hand panel.
+Open three terminal windows:
 
-## ⚠️ Known Limitations
-- VAD (Voice Activity Detection) in the browser can occasionally split sentences awkwardly if the speaker pauses for exactly 2 seconds.
-- The platform relies entirely on `ffmpeg-static` for backend processing; extremely large files might encounter Node.js memory limits.
-- Currently, no centralized logging service (e.g. Datadog) is integrated.
+#### Terminal 1: Python Whisper Service
+```bash
+cd python-services/whisper-service
+uvicorn main:app --reload --port 8000
+```
+
+#### Terminal 2: Backend API & AI Workers
+```bash
+cd apps/backend
+npm run dev
+```
+
+#### Terminal 3: Frontend Client
+```bash
+cd apps/frontend
+npm run dev
+```
+Visit **`http://localhost:5173`** in your browser.
+
+---
+
+## 🧪 Demo & Showcase Flow
+
+1. **Log in:** Log in as a Teacher or Student.
+2. **Start a Live Lecture (Teacher):**
+   - Navigate to a Course and click **"Start New Lecture"**.
+   - Select your microphone and begin speaking.
+3. **View Live Captions (Student):**
+   - Open an incognito window, log in as a Student, and navigate to `/courses/:courseId/live`.
+   - Watch speech appear live on the timeline as the instructor speaks.
+4. **End Session:**
+   - Click **"End Live Session"** from either the recording screen, live viewer, or course banner.
+5. **Explore the AI Study Workspace:**
+   - Open the completed lecture.
+   - Scroll through the virtualized timeline.
+   - Review AI-generated chapter summaries.
+   - Practice with **3D Flashcards** (flip and cycle using arrow keys).
+   - Take the **Auto-Generated Quiz** with instant grading.
+   - Ask the **AI Tutor** any question and click the timestamp citations to jump directly to the relevant point in the lecture.
+6. **Billing & Wallet:**
+   - Navigate to `/billing` to inspect credit consumption and test Razorpay test-mode recharge.
+
+---
 
 ## 🛣 Future Roadmap
-- **Deployment:** Containerize via Docker and deploy on AWS ECS or Render.
-- **Multi-modal AI:** Pass actual video frames to Gemini 1.5 Pro to index visual slide content alongside the audio.
-- **RAG Assistant:** Enable the Q/A chatbox using vector embeddings (Pinecone/Qdrant).
+
+- [ ] **Multi-Modal AI:** Process whiteboard images or presentation slide screenshots alongside audio transcripts.
+- [ ] **Native Mobile App:** Build cross-platform React Native / Flutter apps for on-the-go student flashcard practice.
+- [ ] **Automated Multi-Language Translation:** Translate lecture transcripts and study materials into regional languages.
+- [ ] **Cloud Vector Storage:** Integrate MongoDB Atlas Vector Search or Pinecone for campus-wide multi-course semantic search.
+- [ ] **Automated Export:** One-click PDF study pack and Anki deck export for flashcards.
